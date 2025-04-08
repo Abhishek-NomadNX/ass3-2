@@ -23,6 +23,19 @@ task runClient(type: JavaExec) {
   args "1"
 }
 
+task runClientCMD(type: JavaExec) {
+  group 'gui'
+  description 'Displays a GUI for a game of concentration'
+
+  classpath = sourceSets.main.runtimeClasspath
+
+  main = 'Assign32starter.SockClient'
+  standardInput = System.in
+
+  args "localhost"
+  args 8888
+}
+
 task runServer(type: JavaExec) {
   group 'gui'
   description 'Displays a GUI for a game of concentration'
