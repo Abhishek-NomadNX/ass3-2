@@ -1,15 +1,9 @@
 package Assign32starter;
 
 import java.net.*;
-import java.util.Base64;
-import java.util.Set;
 import java.util.Stack;
 import java.util.*;
 
-import javax.imageio.ImageIO;
-import javax.swing.ImageIcon;
-
-import java.awt.image.BufferedImage;
 import java.io.*;
 
 import org.json.*;
@@ -33,8 +27,8 @@ public class SockServer {
     static String duration;
     static long startTimeMillis = 0;
     static boolean isGameRunning = false;
-    static Map<String, Integer> allScores = new LinkedHashMap<>();
-    static final String SCORE_FILE = "scores.txt";
+    static Map<String, Integer> leaderboard = new LinkedHashMap<>();
+    static final String SCORE_FILE = "leaderboard.txt";
 
     static String currentUser = "";
     static int score = 0;
@@ -114,7 +108,6 @@ public class SockServer {
                     res.put("msg", "A game is already in progress. Please quit first.");
                 } else {
                     statGame(req);
-                    isGameRunning = true;
                     res.put("ok", true);
                     res.put("img", getCurrentImage());
                     res.put("msg", "Game Started");
@@ -128,7 +121,6 @@ public class SockServer {
                 String correctMovie = movieOrder.get(currentMovieIndex).toLowerCase();
                 if (userGuess.equals(correctMovie)) {
                     score++;
-                    allScores.put(currentUser, score); // Update score in leaderboard
                     res.put("ok", true);
                     res.put("msg", "Correct! Moving to next movie.");
                     currentMovieIndex++;
@@ -194,25 +186,19 @@ public class SockServer {
                     break;
                 }
 
-                int previous = allScores.getOrDefault(currentUser, 0);
-                if (score > previous) {
-                    allScores.put(currentUser, score);
-                }
-
                 res.put("ok", true);
-                res.put("msg", "Goodbye " + currentUser + "! Your score: " + score + ". You can now start a new game.");
-                allScores.put(currentUser, score);
-                isGameRunning = false;
+                res.put("msg", "Goodbye " + currentUser + "! Your score: " + score);
+                endGame();
                 break;
 
-            case "scores":
+            case "leaderboard":
                 res.put("ok", true);
                 res.put("msg", "All Scores");
                 JSONObject scoresObj = new JSONObject();
-                for (Map.Entry<String, Integer> entry : allScores.entrySet()) {
+                for (Map.Entry<String, Integer> entry : leaderboard.entrySet()) {
                     scoresObj.put(entry.getKey(), entry.getValue());
                 }
-                res.put("scores", scoresObj);
+                res.put("leaderboard", scoresObj);
                 break;
 
             default:
@@ -242,12 +228,37 @@ public class SockServer {
 
         currentMovieIndex = 0;
         currentImageIndex = 0;
+        isGameRunning = true;
         score = 0;
         initializeMovies();
 
-        // Add player to leaderboard with 0 score
-        allScores.put(currentUser, 0);
     }
+
+    static void endGame() {
+        if (!currentUser.isEmpty()) {
+            int previous = leaderboard.getOrDefault(currentUser, 0);
+            if (score > previous) {
+                leaderboard.put(currentUser, score);
+                System.out.println("Updated score for " + currentUser + ": " + score);
+            } else {
+                System.out.println(currentUser + " finished with score: " + score + " (not a high score)");
+            }
+        }
+
+        // Reset game state
+        currentUser = "";
+        score = 0;
+        currentMovieIndex = 0;
+        currentImageIndex = 0;
+
+        skipsLeft = 0;
+        movieOrder.clear();
+
+        isGameRunning = false;
+
+        saveScores(); // save to file
+    }
+
 
     static void initializeMovies() {
         movieImages.put("Inception", Arrays.asList("inception1.png", "inception2.png", "inception3.png", "inception4.png"));
@@ -276,10 +287,9 @@ public class SockServer {
         }
 
         if (isTimeOver()) {
-            isGameRunning = false;
-            allScores.put(currentUser, score);
             res.put("ok", false);
             res.put("msg", "Time Over! Game ended. Your score: " + score);
+            endGame();
             return false;
         }
 
@@ -330,7 +340,7 @@ public class SockServer {
                 if (parts.length == 2) {
                     String name = parts[0].trim();
                     int score = Integer.parseInt(parts[1].trim());
-                    allScores.put(name, score);
+                    leaderboard.put(name, score);
                 }
             }
             System.out.println("Leaderboard loaded successfully.");
@@ -342,7 +352,7 @@ public class SockServer {
 
     static void saveScores() {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(SCORE_FILE))) {
-            for (Map.Entry<String, Integer> entry : allScores.entrySet()) {
+            for (Map.Entry<String, Integer> entry : leaderboard.entrySet()) {
                 writer.write(entry.getKey() + ":" + entry.getValue());
                 writer.newLine();
             }

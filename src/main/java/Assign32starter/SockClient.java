@@ -41,49 +41,46 @@ class SockClient {
             boolean requesting = true;
             Scanner scanner = new Scanner(System.in);
             while (requesting) {
-                System.out.println("\nChoose action:");
-                System.out.println("1 - start\n2 - guess\n3 - next\n4 - skip\n5 - remaining\n0 - quit");
-                int choice = Integer.parseInt(scanner.nextLine());
+                System.out.println("Enter a command: start, next, skip, remaining, leaderboard, quit or simply  \"moviename\"");
+                String input = scanner.nextLine().trim().toLowerCase();
                 JSONObject request = new JSONObject();
 
-                switch (choice) {
-                    case 1:
-                        System.out.println("Enter your name");
+                switch (input) {
+                    case "start":
+                        System.out.println("Enter your name:");
                         String username = scanner.nextLine();
 
-                        System.out.println("Enter duration");
+                        System.out.println("Enter duration:");
                         String duration = scanner.nextLine();
 
                         request.put("action", "start");
                         request.put("name", username);
                         request.put("duration", duration);
-
                         break;
-                    case 2:
-                        System.out.println("Enter your movie guess: ");
-                        String guess = scanner.nextLine();
 
-                        request.put("action", "guess");
-                        request.put("answer", guess);
-                        break;
-                    case 3:
+                    case "next":
                         request.put("action", "next");
                         break;
-                    case 4:
+
+                    case "skip":
                         request.put("action", "skip");
                         break;
-                    case 5:
+
+                    case "remaining":
                         request.put("action", "remaining");
                         break;
-                    case 6:
-                        request.put("action", "scores");
+
+                    case "leaderboard":
+                        request.put("action", "leaderboard");
                         break;
-                    case 0:
+
+                    case "quit":
                         request.put("action", "quit");
                         break;
+
                     default:
-                        System.out.println("Invalid option. Try again.");
-                        continue;
+                        request.put("action", "guess");
+                        request.put("answer", input);
                 }
                 // Send request
                 System.out.println(request);
