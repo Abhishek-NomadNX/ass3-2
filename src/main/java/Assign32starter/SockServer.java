@@ -29,57 +29,70 @@ public class SockServer {
     static List<String> movieOrder = new ArrayList<>();
     static int currentMovieIndex = 0;
     static int currentImageIndex = 0;
-    static int skipsLeft = 3;
+    static int skipsLeft = 0;
     static String duration;
-
+    static long startTimeMillis = 0;
     static boolean isGameRunning = false;
     static Map<String, Integer> allScores = new LinkedHashMap<>();
+    static final String SCORE_FILE = "scores.txt";
 
     static String currentUser = "";
     static int score = 0;
 
     public static void main(String args[]) {
-        Socket sock;
+        Socket sock = null;
 
         try {
+            loadScores(); // Load leaderboard from file on server start
 
-            //opening the socket here, just hard coded since this is just a bas example
-            ServerSocket serv = new ServerSocket(8888); // TODO, should not be hardcoded
-            System.out.println("Server ready for connetion");
+            ServerSocket serv = new ServerSocket(8888);
+            System.out.println("🎮 Server ready for connection on port 8888");
 
-            // placeholder for the person who wants to play a game
-            String name = "";
-            int points = 0;
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                saveScores();
+                System.out.println("Leaderboard saved. Server shutting down.");
+            }));
 
-            // read in one object, the message. we know a string was written only by knowing what the client sent.
-            // must cast the object from Object to desired type to be useful
             while (true) {
-                sock = serv.accept(); // blocking wait
-                System.out.println("Client connected");
+                try {
+                    sock = serv.accept();
+                    System.out.println("Client connected");
 
-                // setup the object reading channel
-                in = new ObjectInputStream(sock.getInputStream());
+                    in = new ObjectInputStream(sock.getInputStream());
+                    OutputStream out = sock.getOutputStream();
+                    os = new DataOutputStream(out);
 
-                // get output channel
-                OutputStream out = sock.getOutputStream();
+                    boolean clientActive = true;
+                    while (clientActive) {
+                        try {
+                            String s = (String) in.readObject();
+                            System.out.println("Request: " + s);
 
-                // create an object output writer (Java only)
-                os = new DataOutputStream(out);
-
-                while(true) {
-                    try {
-                        String s = (String) in.readObject();
-                        System.out.println("Request : " + s);
-                        JSONObject req = new JSONObject(s);
-                        JSONObject res = handleRequest(req);
-                        writeOut(res);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                        JSONObject error = new JSONObject();
-                        error.put("ok", false);
-                        error.put("message", "Error processing request");
-                        writeOut(error);
+                            JSONObject req = new JSONObject(s);
+                            JSONObject res = handleRequest(req);
+                            writeOut(res);
+                        } catch (EOFException | SocketException clientDisconnected) {
+                            System.out.println("Client disconnected.");
+                            clientActive = false; // exit inner loop
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                            JSONObject error = new JSONObject();
+                            error.put("ok", false);
+                            error.put("message", "Error processing request");
+                            writeOut(error);
+                        }
                     }
+
+                    // Clean up this client's resources
+                    try {
+                        if (in != null) in.close();
+                        if (os != null) os.close();
+                        if (sock != null) sock.close();
+                    } catch (IOException ioClose) {
+                        System.out.println("Error closing client socket: " + ioClose.getMessage());
+                    }
+                } catch (IOException acceptEx) {
+                    System.out.println("Failed to accept client: " + acceptEx.getMessage());
                 }
             }
 
@@ -88,23 +101,34 @@ public class SockServer {
         }
     }
 
+
+
     static JSONObject handleRequest(JSONObject req) throws Exception {
         String action = req.getString("action");
         JSONObject res = new JSONObject();
 
         switch (action) {
             case "start":
-                statGame(req);
-                res.put("ok", true);
-                res.put("img", getCurrentImage());
-                res.put("msg", "Game Started");
+                if (isGameRunning) {
+                    res.put("ok", false);
+                    res.put("msg", "A game is already in progress. Please quit first.");
+                } else {
+                    statGame(req);
+                    isGameRunning = true;
+                    res.put("ok", true);
+                    res.put("img", getCurrentImage());
+                    res.put("msg", "Game Started");
+                }
                 break;
 
             case "guess":
+                if (!validateGameInProgress(res)) break;
+
                 String userGuess = req.getString("answer").toLowerCase();
                 String correctMovie = movieOrder.get(currentMovieIndex).toLowerCase();
                 if (userGuess.equals(correctMovie)) {
                     score++;
+                    allScores.put(currentUser, score); // Update score in leaderboard
                     res.put("ok", true);
                     res.put("msg", "Correct! Moving to next movie.");
                     currentMovieIndex++;
@@ -122,6 +146,8 @@ public class SockServer {
                 break;
 
             case "next":
+                if (!validateGameInProgress(res)) break;
+
                 currentImageIndex++;
                 if (currentImageIndex >= 4) {
                     currentImageIndex = 3;
@@ -135,6 +161,8 @@ public class SockServer {
                 break;
 
             case "skip":
+                if (!validateGameInProgress(res)) break;
+
                 if (skipsLeft > 0) {
                     skipsLeft--;
                     currentMovieIndex++;
@@ -153,13 +181,38 @@ public class SockServer {
                 break;
 
             case "remaining":
+                if (!validateGameInProgress(res)) break;
+
                 res.put("ok", true);
                 res.put("msg", "Skips remaining: " + skipsLeft);
                 break;
 
             case "quit":
+                if (!isGameRunning) {
+                    res.put("ok", false);
+                    res.put("msg", "No game in progress to quit.");
+                    break;
+                }
+
+                int previous = allScores.getOrDefault(currentUser, 0);
+                if (score > previous) {
+                    allScores.put(currentUser, score);
+                }
+
                 res.put("ok", true);
-                res.put("msg", "Goodbye " + currentUser + "! Your score: " + score);
+                res.put("msg", "Goodbye " + currentUser + "! Your score: " + score + ". You can now start a new game.");
+                allScores.put(currentUser, score);
+                isGameRunning = false;
+                break;
+
+            case "scores":
+                res.put("ok", true);
+                res.put("msg", "All Scores");
+                JSONObject scoresObj = new JSONObject();
+                for (Map.Entry<String, Integer> entry : allScores.entrySet()) {
+                    scoresObj.put(entry.getKey(), entry.getValue());
+                }
+                res.put("scores", scoresObj);
                 break;
 
             default:
@@ -167,6 +220,7 @@ public class SockServer {
                 res.put("msg", "Unknown command.");
                 break;
         }
+
 
         return res;
     }
@@ -177,16 +231,22 @@ public class SockServer {
 
         if(duration.equalsIgnoreCase("short")) {
             skipsLeft = 2;
+            startTimeMillis = System.currentTimeMillis() + 30 * 1000;
         } else if(duration.equalsIgnoreCase("medium")) {
             skipsLeft = 4;
+            startTimeMillis = System.currentTimeMillis() + 60 * 1000;
         } else {
             skipsLeft = 6;
+            startTimeMillis = System.currentTimeMillis() + 90 * 1000;
         }
 
         currentMovieIndex = 0;
         currentImageIndex = 0;
         score = 0;
         initializeMovies();
+
+        // Add player to leaderboard with 0 score
+        allScores.put(currentUser, 0);
     }
 
     static void initializeMovies() {
@@ -208,6 +268,23 @@ public class SockServer {
         return movieImages.get(movie).get(currentImageIndex);
     }
 
+    static boolean validateGameInProgress(JSONObject res) {
+        if (!isGameRunning) {
+            res.put("ok", false);
+            res.put("msg", "No game in progress. Please start a game first.");
+            return false;
+        }
+
+        if (isTimeOver()) {
+            isGameRunning = false;
+            allScores.put(currentUser, score);
+            res.put("ok", false);
+            res.put("msg", "Time Over! Game ended. Your score: " + score);
+            return false;
+        }
+
+        return true;
+    }
     /* TODO this is for you to implement, I just put a place holder here */
     public static JSONObject sendImg(String filename, JSONObject obj) throws Exception {
         File file = new File(filename);
@@ -221,6 +298,7 @@ public class SockServer {
         return obj;
     }
 
+
     // sends the response and closes the connection between client and server.
     static void writeOut(JSONObject res) {
         try {
@@ -233,4 +311,46 @@ public class SockServer {
         }
 
     }
+
+    static boolean isTimeOver() {
+        return System.currentTimeMillis() > startTimeMillis;
+    }
+
+    static void loadScores() {
+        File file = new File(SCORE_FILE);
+        if (!file.exists()) {
+            System.out.println("Leaderboard file not found. Creating new one.");
+            return;
+        }
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String[] parts = line.split(":");
+                if (parts.length == 2) {
+                    String name = parts[0].trim();
+                    int score = Integer.parseInt(parts[1].trim());
+                    allScores.put(name, score);
+                }
+            }
+            System.out.println("Leaderboard loaded successfully.");
+        } catch (Exception e) {
+            System.out.println("Failed to load leaderboard.");
+            e.printStackTrace();
+        }
+    }
+
+    static void saveScores() {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(SCORE_FILE))) {
+            for (Map.Entry<String, Integer> entry : allScores.entrySet()) {
+                writer.write(entry.getKey() + ":" + entry.getValue());
+                writer.newLine();
+            }
+        } catch (IOException e) {
+            System.out.println("Error writing leaderboard to file.");
+            e.printStackTrace();
+        }
+    }
+
+
 }

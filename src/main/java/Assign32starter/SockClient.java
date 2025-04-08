@@ -75,9 +75,11 @@ class SockClient {
                     case 5:
                         request.put("action", "remaining");
                         break;
+                    case 6:
+                        request.put("action", "scores");
+                        break;
                     case 0:
                         request.put("action", "quit");
-                        requesting = false;
                         break;
                     default:
                         System.out.println("Invalid option. Try again.");
