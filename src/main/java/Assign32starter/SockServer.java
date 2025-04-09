@@ -111,7 +111,7 @@ public class SockServer {
                 } else {
                     statGame(req);
                     res.put("ok", true);
-                    res.put("img", getCurrentImage());
+                    res.put("image", getCurrentImage());
                     res.put("msg", "Game Started");
                 }
                 break;
@@ -133,7 +133,7 @@ public class SockServer {
                 }
 
                 if (currentMovieIndex < movieOrder.size()) {
-                    res.put("img", getCurrentImage());
+                    res.put("image", getCurrentImage());
                 } else {
                     res.put("msg", "Game Over! No more movies.");
                 }
@@ -151,7 +151,7 @@ public class SockServer {
                     res.put("ok", true);
                     res.put("msg", "Here is a clearer image.");
                 }
-                res.put("img", getCurrentImage());
+                res.put("image", getCurrentImage());
                 break;
 
             case "skip":
@@ -164,7 +164,7 @@ public class SockServer {
                     res.put("ok", true);
                     res.put("msg", "Movie skipped.");
                     if (currentMovieIndex < movieOrder.size()) {
-                        res.put("img", getCurrentImage());
+                        res.put("image", getCurrentImage());
                     } else {
                         res.put("msg", "Game Over! No more movies.");
                     }
@@ -214,7 +214,6 @@ public class SockServer {
     }
 
     static void statGame(JSONObject req) {
-        currentUser = req.getString("name");
         duration = req.getString("duration");
 
         if(duration.equalsIgnoreCase("short")) {
@@ -263,17 +262,27 @@ public class SockServer {
 
 
     static void initializeMovies() {
-        movieImages.put("Inception", Arrays.asList("inception1.png", "inception2.png", "inception3.png", "inception4.png"));
-        movieImages.put("Titanic", Arrays.asList("titanic1.png", "titanic2.png", "titanic3.png", "titanic4.png"));
-        movieImages.put("Matrix", Arrays.asList("matrix1.png", "matrix2.png", "matrix3.png", "matrix4.png"));
-        movieImages.put("Avatar", Arrays.asList("avatar1.png", "avatar2.png", "avatar3.png", "avatar4.png"));
-        movieImages.put("Interstellar", Arrays.asList("interstellar1.png", "interstellar2.png", "interstellar3.png", "interstellar4.png"));
+        movieImages.put("BackToTheFuture", Arrays.asList(
+                "BackToTheFuture1.png", "BackToTheFuture2.png", "BackToTheFuture3.png", "BackToTheFuture4.png"));
+
+        movieImages.put("JurassicPark", Arrays.asList(
+                "JurassicPark1.png", "JurassicPark2.png", "JurassicPark3.png", "JurassicPark4.png"));
+
+        movieImages.put("LordOfTheRings", Arrays.asList(
+                "LordOfTheRings1.png", "LordOfTheRings2.png", "LordOfTheRings3.png", "LordOfTheRings4.png"));
+
+        movieImages.put("TheDarkKnight", Arrays.asList(
+                "TheDarkKnight1.png", "TheDarkKnight2.png", "TheDarkKnight3.png", "TheDarkKnight4.png"));
+
+        movieImages.put("TheLionKing", Arrays.asList(
+                "TheLionKing1.png", "TheLionKing2.png", "TheLionKing3.png", "TheLionKing4.png"));
 
         // Create a temporary list of keys, shuffle, then add to movieOrder
         List<String> movieList = new ArrayList<>(movieImages.keySet());
         Collections.shuffle(movieList); // Randomize the order
         movieOrder.addAll(movieList);
     }
+
 
     static String getCurrentImage() {
         if (currentMovieIndex >= movieOrder.size()) return "none";

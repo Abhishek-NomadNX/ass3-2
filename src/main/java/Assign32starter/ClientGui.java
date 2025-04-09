@@ -1,184 +1,247 @@
 package Assign32starter;
 
-import java.awt.Dimension;
-import java.awt.GridBagConstraints;
-import java.awt.GridBagLayout;
-import java.io.*;
-import java.net.Socket;
-import javax.swing.JDialog;
-import javax.swing.WindowConstants;
 import org.json.JSONObject;
 
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.io.*;
+import java.net.Socket;
+
 public class ClientGui implements OutputPanel.EventHandlers {
-    JDialog frame;
-    PicturePanel picPanel;
-    OutputPanel outputPanel;
+    private JFrame frame;
+    private CardLayout cardLayout;
+    private JPanel cards;
 
-    Socket sock;
-    ObjectOutputStream os;
-    DataInputStream in;
+    private JPanel mainMenuPanel;
+    private JPanel leaderboardPanel;
+    private JPanel gamePanel;
 
-    String host = "localhost";
-    int port = 8888;
+    private OutputPanel outputPanel;
+    private PicturePanel picPanel;
+    private JTextArea leaderboardText;
 
-    volatile boolean running = true;
+    private Socket socket;
+    private ObjectOutputStream os;
+    private DataInputStream in;
 
-    public ClientGui(String host, int port) throws IOException {
+    private String host;
+    private int port;
+
+    public ClientGui(String host, int port) {
         this.host = host;
         this.port = port;
 
-        frame = new JDialog();
-        frame.setLayout(new GridBagLayout());
-        frame.setMinimumSize(new Dimension(500, 500));
-        frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+        frame = new JFrame("Movie Guess Game");
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setMinimumSize(new Dimension(600, 600));
 
-        picPanel = new PicturePanel();
-        GridBagConstraints c = new GridBagConstraints();
-        c.gridx = 0;
-        c.gridy = 0;
-        c.weighty = 0.25;
-        frame.add(picPanel, c);
+        cardLayout = new CardLayout();
+        cards = new JPanel(cardLayout);
 
-        c = new GridBagConstraints();
-        c.gridx = 0;
-        c.gridy = 1;
-        c.weighty = 0.75;
-        c.weightx = 1;
-        c.fill = GridBagConstraints.BOTH;
-        outputPanel = new OutputPanel();
-        outputPanel.addEventHandlers(this);
-        frame.add(outputPanel, c);
+        initMainMenu();
+        initLeaderboardPanel();
+        initGamePanel();
 
-        picPanel.newGame(1);
-        insertImage("img/TheDarkKnight1.png", 0, 0);
-
-        open(); // socket connection ONCE
-
-        // Start background thread to listen for server messages
-        new Thread(this::listenToServer).start();
-
-        // Optional: send a hello message to initialize
-        JSONObject hello = new JSONObject();
-        hello.put("type", "start");
-        hello.put("action", "hello");
-        sendToServer(hello);
-    }
-
-    public void show(boolean makeModal) {
+        frame.add(cards);
         frame.pack();
-        frame.setModal(makeModal);
         frame.setVisible(true);
     }
 
-    public void newGame(int dimension) {
-        picPanel.newGame(dimension);
-        outputPanel.appendOutput("Started new game with a " + dimension + "x" + dimension + " board.");
+    private void initMainMenu() {
+        mainMenuPanel = new JPanel();
+        mainMenuPanel.setLayout(new GridLayout(3, 1, 10, 10));
+
+        JButton startBtn = new JButton("Start");
+        JButton leaderboardBtn = new JButton("Leader Board");
+        JButton quitBtn = new JButton("Quit");
+
+        startBtn.addActionListener(e -> showStartDialog());
+        leaderboardBtn.addActionListener(e -> showLeaderboard());
+        quitBtn.addActionListener(e -> quit());
+
+        mainMenuPanel.add(startBtn);
+        mainMenuPanel.add(leaderboardBtn);
+        mainMenuPanel.add(quitBtn);
+
+        cards.add(mainMenuPanel, "mainMenu");
     }
 
-    public boolean insertImage(String filename, int row, int col) throws IOException {
-        try {
-            if (picPanel.insertImage(filename, row, col)) {
-                outputPanel.appendOutput("Inserting " + filename + " in position (" + row + ", " + col + ")");
-                return true;
+    private void initLeaderboardPanel() {
+        leaderboardPanel = new JPanel(new BorderLayout());
+
+        leaderboardText = new JTextArea();
+        leaderboardText.setEditable(false);
+        JScrollPane scroll = new JScrollPane(leaderboardText);
+        leaderboardPanel.add(scroll, BorderLayout.CENTER);
+
+        JButton backBtn = new JButton("Back");
+        backBtn.addActionListener(e -> cardLayout.show(cards, "mainMenu"));
+        leaderboardPanel.add(backBtn, BorderLayout.SOUTH);
+
+        cards.add(leaderboardPanel, "leaderboard");
+    }
+
+    private void initGamePanel() {
+        gamePanel = new JPanel(new BorderLayout());
+        picPanel = new PicturePanel();
+        outputPanel = new OutputPanel();
+        outputPanel.addEventHandlers(this);
+
+        gamePanel.add(picPanel, BorderLayout.NORTH);
+        gamePanel.add(outputPanel, BorderLayout.CENTER);
+
+        cards.add(gamePanel, "game");
+    }
+
+    private void showStartDialog() {
+        JTextField nameField = new JTextField();
+        JTextField durationField = new JTextField();
+        Object[] fields = {
+                "Name:", nameField,
+                "Duration:", durationField
+        };
+
+        int result = JOptionPane.showConfirmDialog(frame, fields, "Start Game", JOptionPane.OK_CANCEL_OPTION);
+        if (result == JOptionPane.OK_OPTION) {
+            String name = nameField.getText().trim();
+            String duration = durationField.getText().trim();
+            if (!name.isEmpty() && !duration.isEmpty()) {
+                sendStartRequest(name, duration);
+                cardLayout.show(cards, "game");
+                outputPanel.appendOutput("Game started for " + name);
+            } else {
+                JOptionPane.showMessageDialog(frame, "Name and duration are required!");
             }
-        } catch (PicturePanel.InvalidCoordinateException e) {
-            outputPanel.appendOutput(e.toString());
         }
-        return false;
     }
 
+    private void sendStartRequest(String name, String duration) {
+        try {
+            JSONObject request = new JSONObject();
+            request.put("action", "start");
+            request.put("name", name);
+            request.put("duration", duration);
+
+            connectIfNeeded();
+            os.writeObject(request.toString());
+            os.flush();
+
+            String response = in.readUTF();
+            JSONObject json = new JSONObject(response);
+            outputPanel.appendOutput(response);
+            String image = json.optString("image");
+            if (!image.isEmpty()) {
+                picPanel.insertImage("img/" + image, 500, 500);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void showLeaderboard() {
+        try {
+            JSONObject request = new JSONObject();
+            request.put("action", "leaderboard");
+
+            connectIfNeeded();
+            os.writeObject(request.toString());
+            os.flush();
+
+            String response = in.readUTF();
+            leaderboardText.setText(response);
+            cardLayout.show(cards, "leaderboard");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void quit() {
+        try {
+            JSONObject request = new JSONObject();
+            request.put("action", "quit");
+            connectIfNeeded();
+            os.writeObject(request.toString());
+            os.flush();
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            disconnect();
+            System.exit(0);
+        }
+    }
+
+    private void connectIfNeeded() throws IOException {
+        if (socket == null || socket.isClosed()) {
+            socket = new Socket(host, port);
+            os = new ObjectOutputStream(socket.getOutputStream());
+            in = new DataInputStream(socket.getInputStream());
+        }
+    }
+
+    private void disconnect() {
+        try {
+            if (os != null) os.close();
+            if (in != null) in.close();
+            if (socket != null) socket.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // When user presses "Submit"
     @Override
     public void submitClicked() {
-        String userInput = outputPanel.getInputText().trim().toLowerCase();
-        JSONObject request = new JSONObject();
+        String inputText = outputPanel.getInputText().trim();
+        if (inputText.isEmpty()) return;
 
-        switch (userInput) {
-            case "start":
-                request.put("action", "start");
-                request.put("name", "Player"); // could prompt for actual name
-                request.put("duration", "60");
-                break;
-            case "next":
-            case "skip":
-            case "remaining":
-            case "leaderboard":
-            case "quit":
-                request.put("action", userInput);
-                break;
-            default:
+        try {
+            JSONObject request = new JSONObject();
+            if (inputText.equals("next") || inputText.equals("skip") ||
+                    inputText.equals("remaining") || inputText.equals("quit")) {
+                request.put("action", inputText);
+            } else {
                 request.put("action", "guess");
-                request.put("answer", userInput);
-        }
+                request.put("answer", inputText);
+            }
 
-        sendToServer(request);
+            os.writeObject(request.toString());
+            os.flush();
 
-        if (userInput.equals("quit")) {
-            running = false;
-            close();
-            frame.dispose();
+            String response = in.readUTF();
+            JSONObject json = new JSONObject(response);
+
+            outputPanel.appendOutput(response);
+
+            String image = json.optString("image");
+            if (!image.isEmpty()) {
+                picPanel.insertImage("img/" + image, 500, 500);
+            }
+
+            int points = json.optInt("points", -1);
+            if (points >= 0) {
+                outputPanel.setPoints(points);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 
     @Override
     public void inputUpdated(String input) {
-        if (input.equals("surprise")) {
-            outputPanel.appendOutput("You found me!");
-        }
-    }
-
-    private void sendToServer(JSONObject request) {
-        try {
-            os.writeObject(request.toString());
-            os.flush();
-        } catch (IOException e) {
-            outputPanel.appendOutput("Error sending to server: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    private void listenToServer() {
-        try {
-            while (running) {
-                String msg = in.readUTF();
-                if (msg == null) break;
-
-                outputPanel.appendOutput("[Server] " + msg);
-
-                // Optional: handle image updates here if server sends them
-                // JSONObject json = new JSONObject(msg);
-                // if (json.has("image")) insertImage(json.getString("image"), 0, 0);
-            }
-        } catch (IOException e) {
-            if (running) {
-                outputPanel.appendOutput("Lost connection to server.");
-                e.printStackTrace();
-            }
-        }
-    }
-
-    public void open() throws IOException {
-        sock = new Socket(host, port);
-        os = new ObjectOutputStream(sock.getOutputStream());
-        in = new DataInputStream(sock.getInputStream());
-    }
-
-    public void close() {
-        try {
-            running = false;
-            if (os != null) os.close();
-            if (in != null) in.close();
-            if (sock != null) sock.close();
-        } catch (IOException e) {
-            e.printStackTrace();
+        // Optional, based on what you want
+        if ("surprise".equalsIgnoreCase(input)) {
+            outputPanel.appendOutput("🎉 Surprise triggered!");
         }
     }
 
     public static void main(String[] args) {
-        try {
-            ClientGui gui = new ClientGui("localhost", 8888);
-            gui.show(true);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        SwingUtilities.invokeLater(() -> {
+            try {
+                new ClientGui("localhost", 8888);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
     }
 }
