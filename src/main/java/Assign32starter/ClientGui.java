@@ -18,8 +18,8 @@ public class ClientGui implements OutputPanel.EventHandlers {
     private JPanel gamePanel;
 
     private OutputPanel outputPanel;
-    private PicturePanel picPanel;
     private JTextArea leaderboardText;
+    private PicturePanel picturePanel;
 
     private Socket socket;
     private ObjectOutputStream os;
@@ -34,7 +34,7 @@ public class ClientGui implements OutputPanel.EventHandlers {
 
         frame = new JFrame("Movie Guess Game");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.setMinimumSize(new Dimension(600, 600));
+        frame.setMinimumSize(new Dimension(800, 600));
 
         cardLayout = new CardLayout();
         cards = new JPanel(cardLayout);
@@ -84,12 +84,17 @@ public class ClientGui implements OutputPanel.EventHandlers {
 
     private void initGamePanel() {
         gamePanel = new JPanel(new BorderLayout());
-        picPanel = new PicturePanel();
+
         outputPanel = new OutputPanel();
         outputPanel.addEventHandlers(this);
 
-        gamePanel.add(picPanel, BorderLayout.NORTH);
-        gamePanel.add(outputPanel, BorderLayout.CENTER);
+        picturePanel = new PicturePanel();
+
+        JPanel centerPanel = new JPanel(new BorderLayout());
+        centerPanel.add(picturePanel, BorderLayout.CENTER);
+
+        gamePanel.add(centerPanel, BorderLayout.CENTER);
+        gamePanel.add(outputPanel, BorderLayout.SOUTH);
 
         cards.add(gamePanel, "game");
     }
@@ -130,10 +135,13 @@ public class ClientGui implements OutputPanel.EventHandlers {
             String response = in.readUTF();
             JSONObject json = new JSONObject(response);
             outputPanel.appendOutput(response);
+
             String image = json.optString("image");
             if (!image.isEmpty()) {
-                picPanel.insertImage("img/" + image, 500, 500);
+                picturePanel.newGame(1); // Assuming a 1x1 grid to start with
+                picturePanel.insertImage("img/" + image, 0, 0);
             }
+
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -189,7 +197,6 @@ public class ClientGui implements OutputPanel.EventHandlers {
         }
     }
 
-    // When user presses "Submit"
     @Override
     public void submitClicked() {
         String inputText = outputPanel.getInputText().trim();
@@ -215,7 +222,7 @@ public class ClientGui implements OutputPanel.EventHandlers {
 
             String image = json.optString("image");
             if (!image.isEmpty()) {
-                picPanel.insertImage("img/" + image, 500, 500);
+                picturePanel.insertImage("img/" + image, 0, 0);
             }
 
             int points = json.optInt("points", -1);
@@ -229,7 +236,6 @@ public class ClientGui implements OutputPanel.EventHandlers {
 
     @Override
     public void inputUpdated(String input) {
-        // Optional, based on what you want
         if ("surprise".equalsIgnoreCase(input)) {
             outputPanel.appendOutput("🎉 Surprise triggered!");
         }
