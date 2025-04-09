@@ -50,22 +50,43 @@ public class ClientGui implements OutputPanel.EventHandlers {
 
     private void initMainMenu() {
         mainMenuPanel = new JPanel();
-        mainMenuPanel.setLayout(new GridLayout(3, 1, 10, 10));
+        mainMenuPanel.setLayout(new BoxLayout(mainMenuPanel, BoxLayout.Y_AXIS));
+        mainMenuPanel.setBorder(BorderFactory.createEmptyBorder(40, 20, 40, 20)); // padding
+
+        JLabel titleLabel = new JLabel("Movie Guessing Game", SwingConstants.CENTER);
+        titleLabel.setFont(new Font("SansSerif", Font.BOLD, 20));
+        titleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         JButton startBtn = new JButton("Start");
-        JButton leaderboardBtn = new JButton("Leader Board");
+        JButton leaderboardBtn = new JButton("Leaderboard");
         JButton quitBtn = new JButton("Quit");
+
+        Dimension buttonSize = new Dimension(120, 30);
+
+        startBtn.setMaximumSize(buttonSize);
+        leaderboardBtn.setMaximumSize(buttonSize);
+        quitBtn.setMaximumSize(buttonSize);
+
+        startBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
+        leaderboardBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
+        quitBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         startBtn.addActionListener(e -> showStartDialog());
         leaderboardBtn.addActionListener(e -> showLeaderboard());
         quitBtn.addActionListener(e -> quit());
 
+        mainMenuPanel.add(titleLabel);
+        mainMenuPanel.add(Box.createRigidArea(new Dimension(0, 30)));
         mainMenuPanel.add(startBtn);
+        mainMenuPanel.add(Box.createRigidArea(new Dimension(0, 15)));
         mainMenuPanel.add(leaderboardBtn);
+        mainMenuPanel.add(Box.createRigidArea(new Dimension(0, 15)));
         mainMenuPanel.add(quitBtn);
 
         cards.add(mainMenuPanel, "mainMenu");
     }
+
+
 
     private void initLeaderboardPanel() {
         leaderboardPanel = new JPanel(new BorderLayout());
