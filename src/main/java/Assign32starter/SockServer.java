@@ -101,6 +101,9 @@ public class SockServer {
         JSONObject res = new JSONObject();
 
         switch (action) {
+            case "hello":
+                res.put("message", "Ping from server");
+                break;
             case "start":
                 if (isGameRunning) {
                     res.put("ok", false);
