@@ -61,7 +61,6 @@ public class SockServer {
                         try {
                             String s = (String) in.readObject();
                             System.out.println("Request: " + s);
-
                             JSONObject req = new JSONObject(s);
                             JSONObject res = handleRequest(req);
                             writeOut(res);
